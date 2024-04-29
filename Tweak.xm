@@ -61,7 +61,7 @@
 @end
 
 static double borderWidth = 4.0;
-static UIColor *borderColor = [UIColor blackColor];
+static UIColor *borderColor = [UIColor systemGrayColor];
 
 //Most CC modules
 %hook CCUIContentModuleContentContainerView	
