@@ -1,11 +1,19 @@
 @import Foundation;
 @import UIKit;
+#import <libcolorpicker.h>
+
+@interface FBSystemService : NSObject
+  +(id)sharedInstance;
+  -(void)exitAndRelaunch:(BOOL)arg1;
+@end
 
 @interface MTMaterialView : UIView
 @end
 
 @interface CCUIContentModuleContainerViewController : UIViewController
 	@property (nonatomic,copy) NSString * moduleIdentifier;
+	@property (assign,getter=isTransitioning,nonatomic) BOOL transitioning;
+	@property (assign,getter=isExpanded,nonatomic) BOOL expanded; 
 @end
 
 @interface UIView (Private)
@@ -32,6 +40,12 @@
 
 @interface HUGridCellBackgroundView : UIView
 	@property (assign,nonatomic) double cornerRadius;
+@end
+
+@interface HUGridCell : UIView
+@end
+
+@interface HUTileCell : UIView
 @end
 
 @interface FCUIActivityControl : UIView {
@@ -61,28 +75,35 @@
 @end
 
 static double borderWidth = 4.0;
-static UIColor *borderColor = [UIColor systemGrayColor];
+static UIColor *borderColor;
 
 //Most CC modules
 %hook CCUIContentModuleContentContainerView	
 	- (void)layoutSubviews {
 		%orig;
 		MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_moduleMaterialView");
+		CCUIContentModuleContainerViewController *viewController = [self _viewControllerForAncestor];
+		CGFloat borderWidthTemp = borderWidth;
 		CGFloat cornerRadius = 0;
 		if (!matView) {
-			// if ([[[self _viewControllerForAncestor] moduleIdentifier] isEqualToString:@"com.apple.FocusUIModule"])
-			// 	cornerRadius = self.compactContinuousCornerRadius;
-			// else
+			//Fixes focus indicator
+			if ([[viewController moduleIdentifier] isEqualToString:@"com.apple.FocusUIModule"]) {
+				if (!viewController.expanded)
+					cornerRadius = self.compactContinuousCornerRadius;
+				else
+					borderWidthTemp = 0.0;
+			}
+			else
 				return;
 		}
 		else {
 			if (matView.layer.cornerRadius > 0)
 				cornerRadius = matView.layer.cornerRadius;
 			else //Fixes flashlight expanded module
-				cornerRadius = self.expandedContinuousCornerRadius;
+				cornerRadius = viewController.expanded ? self.expandedContinuousCornerRadius : self.compactContinuousCornerRadius;
 		}
 
-		self.layer.borderWidth = borderWidth;
+		self.layer.borderWidth = borderWidthTemp;
 		self.layer.borderColor = borderColor.CGColor;
 		[self.layer setCornerRadius:cornerRadius];
 	}
@@ -171,17 +192,49 @@ static UIColor *borderColor = [UIColor systemGrayColor];
 
 %end
 
-//Home Controls
-%hook MTMaterialView
+//Home App in CC, Needs hook in com.apple.HomeUI
+// %hook HUControllableItemCollectionViewController
 
-	-(void)layoutSubviews {
-		%orig;
+// 	-(void)collectionView:(id)arg1 didEndDisplayingCell:(id)arg2 forItemAtIndexPath:(id)arg3 {
+// 		if ([arg2 isKindOfClass:%c(HUTileCell)]) {
+// 			HUTileCell *cell = arg2;
+// 			cell.layer.borderWidth = borderWidth;
+// 			cell.layer.borderColor = borderColor.CGColor;
+// 		}
+// 		%orig;
+// 	}
 
-		if (([self superview] && [[self superview] isKindOfClass:%c(HUGridCellBackgroundView)]) || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"FCCCControlCenterModule")]) {
+// %end
+
+//Home Tiles in CC
+%hook UICollectionViewCell
+
+	-(void)didMoveToWindow {
+		%orig;			
+		if ([self isKindOfClass:%c(HUGridCell)]) {
 			self.layer.borderWidth = borderWidth;
-			self.layer.borderColor = borderColor.CGColor;
-			[self.layer setCornerRadius:self.layer.cornerRadius];
+			self.layer.borderColor = borderColor.CGColor;				
 		}
-	}
+	}	
 
 %end
+
+static void respring(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+  [[%c(FBSystemService) sharedInstance] exitAndRelaunch:YES];
+}
+
+static void reloadSettings() {
+
+	NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:@"/var/jb/var/mobile/Library/Preferences/com.fiore.ccborder.plist"];
+	if(prefs)
+		borderColor = [prefs objectForKey:@"borderColor"] ? LCPParseColorString([prefs objectForKey:@"borderColor"],@"#808080") : [UIColor systemGrayColor];
+	else
+		borderColor = [UIColor systemGrayColor];
+
+}
+
+%ctor {
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadSettings, CFSTR("com.fiore.ccborder.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+	reloadSettings();
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, respring, CFSTR("com.fiore.ccborder.respring"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+}

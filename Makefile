@@ -11,5 +11,12 @@ TWEAK_NAME = CCBorder
 
 CCBorder_FILES = Tweak.xm
 CCBorder_CFLAGS = -fobjc-arc
+CCBorder_LIBRARIES = colorpicker
 
 include $(THEOS_MAKE_PATH)/tweak.mk
+
+SUBPROJECTS += Prefs
+include $(THEOS_MAKE_PATH)/aggregate.mk
+
+after-install::
+	install.exec "sbreload"
