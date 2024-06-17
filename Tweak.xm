@@ -40,9 +40,11 @@
 
 @interface HUGridCellBackgroundView : UIView
 	@property (assign,nonatomic) double cornerRadius;
+	-(void)setCornerRadius:(double)arg1;
 @end
 
 @interface HUGridCell : UIView
+	@property (nonatomic,retain) HUGridCellBackgroundView * gridBackgroundView;
 @end
 
 @interface HUTileCell : UIView
@@ -53,8 +55,12 @@
 }
 @end
 
+@interface MRUTransportButton : UIView
+@end
+
 @interface MRUControlCenterView : UIView
 	@property (retain, nonatomic) UIView *materialView;
+	@property (nonatomic,readonly) MRUTransportButton * routingButton;
 @end
 
 @interface MRUControlCenterButton : UIView
@@ -74,8 +80,13 @@
 }
 @end
 
+static BOOL wantsBorder = YES;
 static double borderWidth = 4.0;
 static UIColor *borderColor;
+
+static BOOL wantsCornerRadius = YES;
+static double cornerRadius = 36;
+
 
 //Most CC modules
 %hook CCUIContentModuleContentContainerView	
@@ -83,112 +94,182 @@ static UIColor *borderColor;
 		%orig;
 		MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_moduleMaterialView");
 		CCUIContentModuleContainerViewController *viewController = [self _viewControllerForAncestor];
-		CGFloat borderWidthTemp = borderWidth;
-		CGFloat cornerRadius = 0;
-		if (!matView) {
-			//Fixes focus indicator
-			if ([[viewController moduleIdentifier] isEqualToString:@"com.apple.FocusUIModule"]) {
-				if (!viewController.expanded)
-					cornerRadius = self.compactContinuousCornerRadius;
+
+		if (wantsBorder) {
+			CGFloat borderWidthTemp = borderWidth;
+			CGFloat cornerRadius = 0;
+			if (!matView) {
+				//Fixes focus indicator
+				if ([[viewController moduleIdentifier] isEqualToString:@"com.apple.FocusUIModule"]) {
+					if (!viewController.expanded)
+						cornerRadius = self.compactContinuousCornerRadius;
+					else
+						borderWidthTemp = 0.0;
+				}
 				else
-					borderWidthTemp = 0.0;
+					return;
 			}
-			else
+			else {
+				if (matView.layer.cornerRadius > 0)
+					cornerRadius = matView.layer.cornerRadius;
+				else //Fixes flashlight expanded module
+					cornerRadius = viewController.expanded ? self.expandedContinuousCornerRadius : self.compactContinuousCornerRadius;
+			}
+
+			self.layer.borderWidth = borderWidthTemp;
+			self.layer.borderColor = borderColor.CGColor;
+			[self.layer setCornerRadius:cornerRadius];
+		}
+
+		if (wantsCornerRadius && ![[viewController moduleIdentifier] isEqualToString:@"com.apple.Home.ControlCenter"]) {
+
+			BOOL expanded = MSHookIvar<BOOL>(self, "_expanded");
+
+			if (expanded)
 				return;
+
+			[self setClipsToBounds: YES];
+			self.layer.cornerRadius = cornerRadius;
+			self.layer.cornerCurve = kCACornerCurveContinuous;				
+
+			for (UIView *subview in self.subviews) {
+
+				UIView *currentView = subview;
+				while (currentView) {
+					if([currentView isKindOfClass: %c(CCUIContinuousSliderView)] || [currentView isKindOfClass:%c(MTMaterialView)] || [currentView isKindOfClass:%c(HUGridCellBackgroundView)]) {
+						[currentView setClipsToBounds: YES];
+						currentView.layer.cornerRadius = cornerRadius;
+						currentView.layer.cornerCurve = kCACornerCurveContinuous;						
+
+						if ([currentView isKindOfClass:%c(HUGridCellBackgroundView)])
+							[(HUGridCellBackgroundView*)currentView setCornerRadius:cornerRadius];
+					}					
+					currentView = currentView.subviews.count > 0 ? currentView.subviews[0] : nil;
+				}
+			}
 		}
-		else {
-			if (matView.layer.cornerRadius > 0)
-				cornerRadius = matView.layer.cornerRadius;
-			else //Fixes flashlight expanded module
-				cornerRadius = viewController.expanded ? self.expandedContinuousCornerRadius : self.compactContinuousCornerRadius;
+	}
+
+%end
+
+//Home Tiles in CC
+%hook UICollectionViewCell
+
+	-(void)didMoveToWindow {
+		%orig;			
+		if ([self isKindOfClass:%c(HUGridCell)]) {
+			if (wantsBorder) {
+				self.layer.borderWidth = borderWidth;
+				self.layer.borderColor = borderColor.CGColor;
+			}
+			
+			// if (wantsCornerRadius) {
+			// 	[((HUGridCell*)self).gridBackgroundView setCornerRadius:cornerRadius-4];		
+			// }
+		}
+	}	
+
+%end
+
+%group Corners
+
+	%hook MRUControlCenterView
+
+		-(void)layoutSubviews {
+			%orig;
+			CGRect origFrame = self.routingButton.frame;
+			origFrame.origin.x = 115;
+			origFrame.origin.y = 5;
+			self.routingButton.frame = origFrame;
 		}
 
-		self.layer.borderWidth = borderWidthTemp;
-		self.layer.borderColor = borderColor.CGColor;
-		[self.layer setCornerRadius:cornerRadius];
-	}
+	%end
 
 %end
 
-//Round Toggle Controls, True Tone etc
-%hook CCUIRoundButton
-	- (void)layoutSubviews {
-		%orig;
-		MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_normalStateBackgroundView");
-		if (!matView) return;
+%group Borders
 
-		self.layer.borderWidth = borderWidth;
-		self.layer.borderColor = borderColor.CGColor;
-		[self.layer setCornerRadius:matView.layer.cornerRadius];
-	}
+	//Round Toggle Controls, True Tone etc
+	%hook CCUIRoundButton
+		- (void)layoutSubviews {
+			%orig;
+			MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_normalStateBackgroundView");
+			if (!matView) return;
 
-%end
+			self.layer.borderWidth = borderWidth;
+			self.layer.borderColor = borderColor.CGColor;
+			[self.layer setCornerRadius:matView.layer.cornerRadius];
+		}
 
-//Volume & Brightness Controls
-%hook CCUIContinuousSliderView
-	- (void)layoutSubviews {
-		%orig;
-		MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_backgroundView");
-		if (!matView) return;		
+	%end
 
-		self.layer.borderWidth = self.frame.size.width < 15 ? 1.0 : borderWidth;
-		self.layer.borderColor = borderColor.CGColor;
-		[self.layer setCornerRadius:matView.layer.cornerRadius];
-	}
+	//Volume & Brightness Controls
+	%hook CCUIContinuousSliderView
+		- (void)layoutSubviews {
+			%orig;
+			MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_backgroundView");
+			if (!matView) return;		
 
-%end
+			self.layer.borderWidth = self.frame.size.width < 15 ? 1.0 : borderWidth;
+			self.layer.borderColor = borderColor.CGColor;
+			[self.layer setCornerRadius:matView.layer.cornerRadius];
+		}
 
-//Focus Modes
-%hook FCUIActivityControl	
-	- (void)layoutSubviews {
-		%orig;
+	%end
 
-		MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_backgroundView");
-		if (!matView) return;
+	//Focus Modes
+	%hook FCUIActivityControl	
+		- (void)layoutSubviews {
+			%orig;
 
-		self.layer.borderWidth = borderWidth;
-		self.layer.borderColor = borderColor.CGColor;
-		[self.layer setCornerRadius:matView.layer.cornerRadius];
-	}
-%end
+			MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_backgroundView");
+			if (!matView) return;
 
-//Tiny + button when 3d touching on dnd module
-%hook _FCUIAddActivityControl	
-	- (void)layoutSubviews {
-		%orig;
+			self.layer.borderWidth = borderWidth;
+			self.layer.borderColor = borderColor.CGColor;
+			[self.layer setCornerRadius:matView.layer.cornerRadius];
+		}
+	%end
 
-		MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_backgroundMaterialView");
-		if (!matView) return;
+	//Tiny + button when 3d touching on dnd module
+	%hook _FCUIAddActivityControl	
+		- (void)layoutSubviews {
+			%orig;
 
-		self.layer.borderWidth = borderWidth;
-		self.layer.borderColor = borderColor.CGColor;
-		[self.layer setCornerRadius:matView.layer.cornerRadius];
-	}
+			MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_backgroundMaterialView");
+			if (!matView) return;
 
-%end
+			self.layer.borderWidth = borderWidth;
+			self.layer.borderColor = borderColor.CGColor;
+			[self.layer setCornerRadius:matView.layer.cornerRadius];
+		}
 
-//Music Platter
-%hook MRUNowPlayingView	
-	- (void)layoutSubviews {
-		%orig;
+	%end
 
-		self.layer.borderWidth = borderWidth;
-		self.layer.borderColor = borderColor.CGColor;
-	}
+	//Music Platter
+	%hook MRUNowPlayingView	
+		- (void)layoutSubviews {
+			%orig;
 
-%end
+			self.layer.borderWidth = borderWidth;
+			self.layer.borderColor = borderColor.CGColor;
+		}
 
-//Music Platter Control Center button
-%hook MRUControlCenterButton	
-	- (void)layoutSubviews {
-		%orig;
+	%end
 
-		MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_backgroundView");
-		if (!matView) return;		
+	//Music Platter Control Center button
+	%hook MRUControlCenterButton	
+		- (void)layoutSubviews {
+			%orig;
 
-		matView.layer.borderWidth = borderWidth;
-		matView.layer.borderColor = borderColor.CGColor;
-	}
+			MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_backgroundView");
+			if (!matView) return;		
+
+			matView.layer.borderWidth = borderWidth;
+			matView.layer.borderColor = borderColor.CGColor;
+		}
+
+	%end
 
 %end
 
@@ -206,31 +287,44 @@ static UIColor *borderColor;
 
 // %end
 
-//Home Tiles in CC
-%hook UICollectionViewCell
-
-	-(void)didMoveToWindow {
-		%orig;			
-		if ([self isKindOfClass:%c(HUGridCell)]) {
-			self.layer.borderWidth = borderWidth;
-			self.layer.borderColor = borderColor.CGColor;				
-		}
-	}	
-
-%end
-
 static void respring(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
   [[%c(FBSystemService) sharedInstance] exitAndRelaunch:YES];
 }
 
 static void reloadSettings() {
 
-	NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:@"/var/jb/var/mobile/Library/Preferences/com.fiore.ccborder.plist"];
-	if(prefs)
-		borderColor = [prefs objectForKey:@"borderColor"] ? LCPParseColorString([prefs objectForKey:@"borderColor"],@"#808080") : [UIColor systemGrayColor];
+	static CFStringRef prefsKey = CFSTR("com.fiore.ccborder");
+	CFPreferencesAppSynchronize(prefsKey);
+
+	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsBorder", prefsKey))) {
+		wantsBorder = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsBorder", prefsKey)) boolValue];
+	}	
+
+	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsCornerRadius", prefsKey))) {
+		wantsCornerRadius = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsCornerRadius", prefsKey)) boolValue];
+	}
+
+	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"borderWidth", prefsKey))) {
+		borderWidth = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"borderWidth", prefsKey)) doubleValue];
+	}	
+
+	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"cornerRadius", prefsKey))) {
+		cornerRadius = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"cornerRadius", prefsKey)) doubleValue];
+	}	
+
+	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"borderColor", prefsKey))) {
+		borderColor = LCPParseColorString([(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"borderColor", prefsKey)) stringValue],@"#808080");
+	}
 	else
 		borderColor = [UIColor systemGrayColor];
 
+	if (wantsBorder)
+		%init(Borders);
+
+	if (wantsCornerRadius)
+		%init(Corners);		
+
+	%init;
 }
 
 %ctor {
