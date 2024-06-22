@@ -121,29 +121,35 @@ static double cornerRadius = 36;
 			[self.layer setCornerRadius:cornerRadius];
 		}
 
-		if (wantsCornerRadius && ![[viewController moduleIdentifier] isEqualToString:@"com.apple.Home.ControlCenter"]) {
+		if (wantsCornerRadius) {
 
 			BOOL expanded = MSHookIvar<BOOL>(self, "_expanded");
 
 			if (expanded)
 				return;
 
-			[self setClipsToBounds: YES];
-			self.layer.cornerRadius = cornerRadius;
-			self.layer.cornerCurve = kCACornerCurveContinuous;				
+			double tempCornerRadius = cornerRadius;				
+
+			if ([[viewController moduleIdentifier] containsString:@"Home.ControlCenter"] || [[viewController moduleIdentifier] containsString:@"DisplayModule"] || [[viewController moduleIdentifier] containsString:@"controlcenter.audio"])
+				tempCornerRadius = tempCornerRadius - 4;
+
+			if (![[viewController moduleIdentifier] containsString:@"Home.ControlCenter"]) {
+				[self setClipsToBounds: YES];
+				self.layer.cornerRadius = tempCornerRadius;
+				self.layer.cornerCurve = kCACornerCurveContinuous;				
+			}				
 
 			for (UIView *subview in self.subviews) {
 
 				UIView *currentView = subview;
 				while (currentView) {
-					if([currentView isKindOfClass: %c(CCUIContinuousSliderView)] || [currentView isKindOfClass:%c(MTMaterialView)] || [currentView isKindOfClass:%c(HUGridCellBackgroundView)]) {
-						[currentView setClipsToBounds: YES];
-						currentView.layer.cornerRadius = cornerRadius;
-						currentView.layer.cornerCurve = kCACornerCurveContinuous;						
+					if([currentView isKindOfClass: %c(CCUIContinuousSliderView)] || [currentView isKindOfClass:%c(MTMaterialView)]) {
 
-						if ([currentView isKindOfClass:%c(HUGridCellBackgroundView)])
-							[(HUGridCellBackgroundView*)currentView setCornerRadius:cornerRadius];
+						[currentView setClipsToBounds: YES];
+						currentView.layer.cornerRadius = tempCornerRadius;
+						currentView.layer.cornerCurve = kCACornerCurveContinuous;						
 					}					
+
 					currentView = currentView.subviews.count > 0 ? currentView.subviews[0] : nil;
 				}
 			}
@@ -162,10 +168,10 @@ static double cornerRadius = 36;
 				self.layer.borderWidth = borderWidth;
 				self.layer.borderColor = borderColor.CGColor;
 			}
-			
-			// if (wantsCornerRadius) {
-			// 	[((HUGridCell*)self).gridBackgroundView setCornerRadius:cornerRadius-4];		
-			// }
+
+			if (wantsCornerRadius) {
+				[((HUGridCell*)self).gridBackgroundView setCornerRadius:cornerRadius-8];
+			}
 		}
 	}	
 
