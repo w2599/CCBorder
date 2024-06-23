@@ -116,6 +116,18 @@ void colorLayers(NSArray *layers, CGColorRef color) {
 	-(void)setAlpha:(CGFloat)alpha {
 		%orig(alpha > 0 ? 1.0 : 0.0);
 	}
+
+%end
+
+%hook UIImageView
+
+	-(void)setAlpha:(CGFloat)alpha {
+		if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"SBElasticVolumeViewController")])		
+			alpha = alpha > 0 ? 1.0 : 0.0;
+
+		%orig(alpha);
+	}
+	
 %end
 
 %hook CCUIContinuousSliderView
@@ -125,12 +137,17 @@ void colorLayers(NSArray *layers, CGColorRef color) {
 		UIColor *glyphColor = nil;
 		if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")])
 			glyphColor = [UIColor colorWithRed: 1.98 green: 1.2 blue: 0.04 alpha: 1];
-		else if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])
+		else if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"SBElasticVolumeViewController")])
 			glyphColor = [UIColor colorWithRed: 0.6 green: 1.15 blue: 1.51 alpha: 1];
 
-		CCUICAPackageView *packageView = MSHookIvar<CCUICAPackageView*>(self,"_compensatingGlyphView");
+		UIView *packageView = MSHookIvar<UIView*>(self,"_compensatingGlyphView");
 		if (packageView && glyphColor) {
-			colorLayers(@[packageView.layer],glyphColor.CGColor);
+			if ([packageView isKindOfClass:%c(CCUICAPackageView)])
+				colorLayers(@[packageView.layer],glyphColor.CGColor);
+			else if ([packageView isKindOfClass:%c(UIImageView)]) {
+				//packageView.alpha = packageView.alpha > 0 ? 1.0 : packageView.alpha;
+				[packageView setTintColor:glyphColor];
+			}
 		}
 	}
 
@@ -217,9 +234,9 @@ void colorLayers(NSArray *layers, CGColorRef color) {
 				self.layer.borderColor = borderColor.CGColor;
 			}
 
-			if (wantsCornerRadius) {
-				[((HUGridCell*)self).gridBackgroundView setCornerRadius:cornerRadius-8];
-			}
+			// if (wantsCornerRadius) {
+			// 	[((HUGridCell*)self).gridBackgroundView setCornerRadius:cornerRadius-8];
+			// }
 		}
 	}	
 
