@@ -94,6 +94,20 @@ static UIColor *borderColor;
 static BOOL wantsCornerRadius = YES;
 static double cornerRadius = 36;
 
+%hook CALayer
+	-(void)setOpacity:(float)opacity {
+		if ([self.delegate isKindOfClass:%c(CCUICAPackageView)]) {
+			id controller = [(CCUICAPackageView *)self.delegate _viewControllerForAncestor];
+			if ([controller isKindOfClass:%c(CCUIDisplayModuleViewController)] ||
+					[controller isKindOfClass:%c(MRUVolumeViewController)] ||
+						[controller isKindOfClass:%c(SBElasticVolumeViewController)])
+						opacity = opacity > 0 ? 1.0 : opacity;
+		}
+
+		%orig(opacity);
+	}
+%end
+
 void colorLayers(NSArray *layers, CGColorRef color) {
 	for (CALayer *sublayer in layers) {
 		if ([sublayer isMemberOfClass:%c(CAShapeLayer)]) {
@@ -103,32 +117,13 @@ void colorLayers(NSArray *layers, CGColorRef color) {
 		}
 		else if (sublayer.sublayers.count == 0) {
 			sublayer.backgroundColor = color;
-			sublayer.borderColor = sublayer.borderColor;
-			sublayer.contentsMultiplyColor = sublayer.contentsMultiplyColor;			
+			sublayer.borderColor = color;
+			sublayer.contentsMultiplyColor = color;			
 		}
 
 		colorLayers(sublayer.sublayers, color);
 	}
 }
-
-%hook CCUICAPackageView
-
-	-(void)setAlpha:(CGFloat)alpha {
-		%orig(alpha > 0 ? 1.0 : 0.0);
-	}
-
-%end
-
-%hook UIImageView
-
-	-(void)setAlpha:(CGFloat)alpha {
-		if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"SBElasticVolumeViewController")])		
-			alpha = alpha > 0 ? 1.0 : 0.0;
-
-		%orig(alpha);
-	}
-	
-%end
 
 %hook CCUIContinuousSliderView
 
@@ -145,7 +140,6 @@ void colorLayers(NSArray *layers, CGColorRef color) {
 			if ([packageView isKindOfClass:%c(CCUICAPackageView)])
 				colorLayers(@[packageView.layer],glyphColor.CGColor);
 			else if ([packageView isKindOfClass:%c(UIImageView)]) {
-				//packageView.alpha = packageView.alpha > 0 ? 1.0 : packageView.alpha;
 				[packageView setTintColor:glyphColor];
 			}
 		}
