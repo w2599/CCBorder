@@ -80,6 +80,13 @@
 }
 @end
 
+@interface CCUICAPackageView : UIView
+@end
+
+@interface CALayer (CCBorder)
+	@property (assign) CGColorRef contentsMultiplyColor;
+@end
+
 static BOOL wantsBorder = YES;
 static double borderWidth = 4.0;
 static UIColor *borderColor;
@@ -87,6 +94,47 @@ static UIColor *borderColor;
 static BOOL wantsCornerRadius = YES;
 static double cornerRadius = 36;
 
+void colorLayers(NSArray *layers, CGColorRef color) {
+	for (CALayer *sublayer in layers) {
+		if ([sublayer isMemberOfClass:%c(CAShapeLayer)]) {
+			CAShapeLayer *shapelayer = (CAShapeLayer *)sublayer;
+			shapelayer.fillColor = color;
+			shapelayer.strokeColor = color;
+		}
+		else if (sublayer.sublayers.count == 0) {
+			sublayer.backgroundColor = color;
+			sublayer.borderColor = sublayer.borderColor;
+			sublayer.contentsMultiplyColor = sublayer.contentsMultiplyColor;			
+		}
+
+		colorLayers(sublayer.sublayers, color);
+	}
+}
+
+%hook CCUICAPackageView
+
+	-(void)setAlpha:(CGFloat)alpha {
+		%orig(alpha > 0 ? 1.0 : 0.0);
+	}
+%end
+
+%hook CCUIContinuousSliderView
+
+	-(void)layoutSubviews {
+		%orig;
+		UIColor *glyphColor = nil;
+		if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")])
+			glyphColor = [UIColor colorWithRed: 1.98 green: 1.2 blue: 0.04 alpha: 1];
+		else if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])
+			glyphColor = [UIColor colorWithRed: 0.6 green: 1.15 blue: 1.51 alpha: 1];
+
+		CCUICAPackageView *packageView = MSHookIvar<CCUICAPackageView*>(self,"_compensatingGlyphView");
+		if (packageView && glyphColor) {
+			colorLayers(@[packageView.layer],glyphColor.CGColor);
+		}
+	}
+
+%end
 
 //Most CC modules
 %hook CCUIContentModuleContentContainerView	
