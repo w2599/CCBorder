@@ -382,47 +382,33 @@ static void respring(CFNotificationCenterRef center, void *observer, CFStringRef
 }
 
 static void reloadSettings() {
-
-	static CFStringRef prefsKey = CFSTR("com.fiore.ccborder");
-	CFPreferencesAppSynchronize(prefsKey);
-
-	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsBorder", prefsKey))) {
-		wantsBorder = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsBorder", prefsKey)) boolValue];
-	}	
-
-	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsCornerRadius", prefsKey))) {
-		wantsCornerRadius = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsCornerRadius", prefsKey)) boolValue];
+	NSDictionary *prefs = [[NSDictionary alloc] initWithContentsOfFile:@"/var/jb/var/mobile/Library/Preferences/com.fiore.ccborder.plist"];
+	if(prefs)
+	{
+		wantsBorder = [prefs objectForKey:@"wantsBorder"] ? [[prefs objectForKey:@"wantsBorder"] boolValue] : wantsBorder;
+		wantsCornerRadius = [prefs objectForKey:@"wantsCornerRadius"] ? [[prefs objectForKey:@"wantsCornerRadius"] boolValue] : wantsCornerRadius;
+		wantsGlyphColoring = [prefs objectForKey:@"wantsGlyphColoring"] ? [[prefs objectForKey:@"wantsGlyphColoring"] boolValue] : wantsGlyphColoring;
+		borderWidth = [prefs objectForKey:@"borderWidth"] ? [[prefs objectForKey:@"borderWidth"] doubleValue] : borderWidth;
+		cornerRadius = [prefs objectForKey:@"cornerRadius"] ? [[prefs objectForKey:@"cornerRadius"] doubleValue] : cornerRadius;
+		borderColor = [prefs objectForKey:@"borderColor"] ? [prefs objectForKey:@"borderColor"] : borderColor;
+		brightnessGlyphColor = [prefs objectForKey:@"brightnessGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"brightnessGlyphColor"],@"#C67828") : brightnessGlyphColor;
+		volumeGlyphColor = [prefs objectForKey:@"volumeGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"volumeGlyphColor"],@"#3C7397") : volumeGlyphColor;
 	}
 
-	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"borderWidth", prefsKey))) {
-		borderWidth = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"borderWidth", prefsKey)) doubleValue];
-	}	
-
-	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"cornerRadius", prefsKey))) {
-		cornerRadius = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"cornerRadius", prefsKey)) doubleValue];
-	}	
-
-	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"borderColor", prefsKey))) {
-		borderColor = LCPParseColorString([(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"borderColor", prefsKey)) stringValue],@"#808080");
-	}
-	else
+	if (!borderColor)
 		borderColor = [UIColor systemGrayColor];
 
-	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsGlyphColoring", prefsKey))) {
-		wantsGlyphColoring = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsGlyphColoring", prefsKey)) boolValue];
-	}		
+	if (!brightnessGlyphColor)
+		brightnessGlyphColor = LCPParseColorString(@"#C67828",@"#C67828");
 
-	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"brightnessGlyphColor", prefsKey))) {
-		brightnessGlyphColor = LCPParseColorString([(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"brightnessGlyphColor", prefsKey)) stringValue],@"#C67828");
-	}
-	else
-		brightnessGlyphColor = [UIColor colorWithRed: 1.98 green: 1.2 blue: 0.04 alpha: 1];
+	if (!volumeGlyphColor)
+		volumeGlyphColor = LCPParseColorString(@"#3C7397",@"#3C7397");
+}
 
-	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"volumeGlyphColor", prefsKey))) {
-		volumeGlyphColor = LCPParseColorString([(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"volumeGlyphColor", prefsKey)) stringValue],@"#3C7397");
-	}
-	else
-		volumeGlyphColor = [UIColor colorWithRed: 0.6 green: 1.15 blue: 1.51 alpha: 1];
+%ctor {
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadSettings, CFSTR("com.fiore.ccborder.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+	reloadSettings();
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, respring, CFSTR("com.fiore.ccborder.respring"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 
 	if (wantsBorder)
 		%init(Borders);
@@ -434,10 +420,4 @@ static void reloadSettings() {
 		%init(GlyphColoring);
 
 	%init;
-}
-
-%ctor {
-	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadSettings, CFSTR("com.fiore.ccborder.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-	reloadSettings();
-	CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, respring, CFSTR("com.fiore.ccborder.respring"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
