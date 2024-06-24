@@ -99,71 +99,77 @@ static UIColor *borderColor;
 static BOOL wantsCornerRadius = YES;
 static double cornerRadius = 36;
 
-%hook CALayer
-	-(void)setOpacity:(float)opacity {
-		if ([self.delegate isKindOfClass:%c(CCUICAPackageView)] || [self.delegate isKindOfClass:%c(UIImageView)]) {
-			id controller = [(UIView *)self.delegate _viewControllerForAncestor];
-			if ([controller isKindOfClass:%c(CCUIDisplayModuleViewController)] ||
-					[controller isKindOfClass:%c(MRUVolumeViewController)] ||
-						[controller isKindOfClass:%c(SBElasticVolumeViewController)])
-						opacity = opacity > 0 ? 1.0 : opacity;
-		}
+static BOOL wantsGlyphColoring = YES;
+static UIColor *brightnessGlyphColor;
+static UIColor *volumeGlyphColor;
 
-		%orig(opacity);
-	}
-%end
-
-void colorLayers(NSArray *layers, CGColorRef color) {
-	for (CALayer *sublayer in layers) {
-		if ([sublayer isMemberOfClass:%c(CAShapeLayer)]) {
-			CAShapeLayer *shapelayer = (CAShapeLayer *)sublayer;
-			shapelayer.fillColor = color;
-			shapelayer.strokeColor = color;
-		}
-		else if (sublayer.sublayers.count == 0) {
-			sublayer.backgroundColor = color;
-			sublayer.borderColor = color;
-			sublayer.contentsMultiplyColor = color;			
-		}
-
-		colorLayers(sublayer.sublayers, color);
-	}
-}
-
-%hook MRUContinuousSliderView
-
-	 -(void)setOutputDeviceAsset:(id)arg1 state:(id)arg2 animated:(BOOL)arg3 {
-		%orig;
-		[self colorSliderGlyphs];
-	 }
-
-%end
-
-%hook CCUIContinuousSliderView
-
-	%new
-	-(void)colorSliderGlyphs {
-		UIColor *glyphColor = nil;
-		if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")])
-			glyphColor = [UIColor colorWithRed: 1.98 green: 1.2 blue: 0.04 alpha: 1];
-		else if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"SBElasticVolumeViewController")])
-			glyphColor = [UIColor colorWithRed: 0.6 green: 1.15 blue: 1.51 alpha: 1];
-
-		UIView *packageView = MSHookIvar<UIView*>(self,"_compensatingGlyphView");
-		if (packageView && glyphColor) {
-			if ([packageView isKindOfClass:%c(CCUICAPackageView)])
-				colorLayers(@[packageView.layer],glyphColor.CGColor);
-			else if ([packageView isKindOfClass:%c(UIImageView)]) {
-				[packageView setTintColor:glyphColor];
+%group GlyphColoring
+	%hook CALayer
+		-(void)setOpacity:(float)opacity {
+			if ([self.delegate isKindOfClass:%c(CCUICAPackageView)] || [self.delegate isKindOfClass:%c(UIImageView)]) {
+				id controller = [(UIView *)self.delegate _viewControllerForAncestor];
+				if ([controller isKindOfClass:%c(CCUIDisplayModuleViewController)] ||
+						[controller isKindOfClass:%c(MRUVolumeViewController)] ||
+							[controller isKindOfClass:%c(SBElasticVolumeViewController)])
+							opacity = opacity > 0 ? 1.0 : opacity;
 			}
-		}		
+
+			%orig(opacity);
+		}
+	%end
+
+	void colorLayers(NSArray *layers, CGColorRef color) {
+		for (CALayer *sublayer in layers) {
+			if ([sublayer isMemberOfClass:%c(CAShapeLayer)]) {
+				CAShapeLayer *shapelayer = (CAShapeLayer *)sublayer;
+				shapelayer.fillColor = color;
+				shapelayer.strokeColor = color;
+			}
+			else if (sublayer.sublayers.count == 0) {
+				sublayer.backgroundColor = color;
+				sublayer.borderColor = color;
+				sublayer.contentsMultiplyColor = color;			
+			}
+
+			colorLayers(sublayer.sublayers, color);
+		}
 	}
 
-	-(void)layoutSubviews {
-		%orig;
-		[self colorSliderGlyphs];
-	}
+	%hook MRUContinuousSliderView
 
+		-(void)setOutputDeviceAsset:(id)arg1 state:(id)arg2 animated:(BOOL)arg3 {
+			%orig;
+			[self colorSliderGlyphs];
+		}
+
+	%end
+
+	%hook CCUIContinuousSliderView
+
+		%new
+		-(void)colorSliderGlyphs {
+			UIColor *glyphColor = nil;
+			if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")])
+				glyphColor = brightnessGlyphColor;
+			else if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"SBElasticVolumeViewController")])
+				glyphColor = volumeGlyphColor;
+
+			UIView *packageView = MSHookIvar<UIView*>(self,"_compensatingGlyphView");
+			if (packageView && glyphColor) {
+				if ([packageView isKindOfClass:%c(CCUICAPackageView)])
+					colorLayers(@[packageView.layer],glyphColor.CGColor);
+				else if ([packageView isKindOfClass:%c(UIImageView)]) {
+					[packageView setTintColor:glyphColor];
+				}
+			}		
+		}
+
+		-(void)layoutSubviews {
+			%orig;
+			[self colorSliderGlyphs];
+		}
+
+	%end
 %end
 
 //Most CC modules
@@ -402,11 +408,30 @@ static void reloadSettings() {
 	else
 		borderColor = [UIColor systemGrayColor];
 
+	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsGlyphColoring", prefsKey))) {
+		wantsGlyphColoring = [(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"wantsGlyphColoring", prefsKey)) boolValue];
+	}		
+
+	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"brightnessGlyphColor", prefsKey))) {
+		brightnessGlyphColor = LCPParseColorString([(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"brightnessGlyphColor", prefsKey)) stringValue],@"#C67828");
+	}
+	else
+		brightnessGlyphColor = [UIColor colorWithRed: 1.98 green: 1.2 blue: 0.04 alpha: 1];
+
+	if (CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"volumeGlyphColor", prefsKey))) {
+		volumeGlyphColor = LCPParseColorString([(id)CFBridgingRelease(CFPreferencesCopyAppValue((CFStringRef)@"volumeGlyphColor", prefsKey)) stringValue],@"#3C7397");
+	}
+	else
+		volumeGlyphColor = [UIColor colorWithRed: 0.6 green: 1.15 blue: 1.51 alpha: 1];
+
 	if (wantsBorder)
 		%init(Borders);
 
 	if (wantsCornerRadius)
-		%init(Corners);		
+		%init(Corners);	
+
+	if (wantsGlyphColoring)
+		%init(GlyphColoring);
 
 	%init;
 }
