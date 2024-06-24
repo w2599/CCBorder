@@ -36,6 +36,11 @@
 	MTMaterialView *_backgroundView;	
 }
 @property (assign,getter=isGlyphVisible,nonatomic) BOOL glyphVisible;
+-(void)colorSliderGlyphs;
+@end
+
+@interface MRUContinuousSliderView : CCUIContinuousSliderView
+
 @end
 
 @interface HUGridCellBackgroundView : UIView
@@ -96,8 +101,8 @@ static double cornerRadius = 36;
 
 %hook CALayer
 	-(void)setOpacity:(float)opacity {
-		if ([self.delegate isKindOfClass:%c(CCUICAPackageView)]) {
-			id controller = [(CCUICAPackageView *)self.delegate _viewControllerForAncestor];
+		if ([self.delegate isKindOfClass:%c(CCUICAPackageView)] || [self.delegate isKindOfClass:%c(UIImageView)]) {
+			id controller = [(UIView *)self.delegate _viewControllerForAncestor];
 			if ([controller isKindOfClass:%c(CCUIDisplayModuleViewController)] ||
 					[controller isKindOfClass:%c(MRUVolumeViewController)] ||
 						[controller isKindOfClass:%c(SBElasticVolumeViewController)])
@@ -125,10 +130,19 @@ void colorLayers(NSArray *layers, CGColorRef color) {
 	}
 }
 
+%hook MRUContinuousSliderView
+
+	 -(void)setOutputDeviceAsset:(id)arg1 state:(id)arg2 animated:(BOOL)arg3 {
+		%orig;
+		[self colorSliderGlyphs];
+	 }
+
+%end
+
 %hook CCUIContinuousSliderView
 
-	-(void)layoutSubviews {
-		%orig;
+	%new
+	-(void)colorSliderGlyphs {
 		UIColor *glyphColor = nil;
 		if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")])
 			glyphColor = [UIColor colorWithRed: 1.98 green: 1.2 blue: 0.04 alpha: 1];
@@ -142,7 +156,12 @@ void colorLayers(NSArray *layers, CGColorRef color) {
 			else if ([packageView isKindOfClass:%c(UIImageView)]) {
 				[packageView setTintColor:glyphColor];
 			}
-		}
+		}		
+	}
+
+	-(void)layoutSubviews {
+		%orig;
+		[self colorSliderGlyphs];
 	}
 
 %end
