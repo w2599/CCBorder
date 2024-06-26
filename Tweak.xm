@@ -40,7 +40,7 @@
 @end
 
 @interface MRUContinuousSliderView : CCUIContinuousSliderView
-
+	@property (nonatomic,readonly) UIView *materialView;
 @end
 
 @interface HUGridCellBackgroundView : UIView
@@ -94,14 +94,14 @@
 
 static BOOL wantsBorder = YES;
 static double borderWidth = 4.0;
-static UIColor *borderColor;
+static UIColor *borderColor = nil;
 
 static BOOL wantsCornerRadius = YES;
 static double cornerRadius = 36;
 
 static BOOL wantsGlyphColoring = YES;
-static UIColor *brightnessGlyphColor;
-static UIColor *volumeGlyphColor;
+static UIColor *brightnessGlyphColor = nil;
+static UIColor *volumeGlyphColor = nil;
 
 %group GlyphColoring
 	%hook CALayer
@@ -133,16 +133,7 @@ static UIColor *volumeGlyphColor;
 
 			colorLayers(sublayer.sublayers, color);
 		}
-	}
-
-	%hook MRUContinuousSliderView
-
-		-(void)setOutputDeviceAsset:(id)arg1 state:(id)arg2 animated:(BOOL)arg3 {
-			%orig;
-			[self colorSliderGlyphs];
-		}
-
-	%end
+	}	
 
 	%hook CCUIContinuousSliderView
 
@@ -164,7 +155,12 @@ static UIColor *volumeGlyphColor;
 			}		
 		}
 
-		-(void)layoutSubviews {
+		-(void)didMoveToWindow {
+			%orig;
+			[self colorSliderGlyphs];
+		}
+
+		-(void)_applyGlyphState:(id)arg1 performConfiguration:(BOOL)arg2 {
 			%orig;
 			[self colorSliderGlyphs];
 		}
@@ -172,99 +168,85 @@ static UIColor *volumeGlyphColor;
 	%end
 %end
 
-//Most CC modules
-%hook CCUIContentModuleContentContainerView	
-	- (void)layoutSubviews {
-		%orig;
-		MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_moduleMaterialView");
-		CCUIContentModuleContainerViewController *viewController = [self _viewControllerForAncestor];
-
-		if (wantsBorder) {
-			CGFloat borderWidthTemp = borderWidth;
-			CGFloat cornerRadius = 0;
-			if (!matView) {
-				//Fixes focus indicator
-				if ([[viewController moduleIdentifier] isEqualToString:@"com.apple.FocusUIModule"]) {
-					if (!viewController.expanded)
-						cornerRadius = self.compactContinuousCornerRadius;
-					else
-						borderWidthTemp = 0.0;
-				}
-				else
-					return;
-			}
-			else {
-				if (matView.layer.cornerRadius > 0)
-					cornerRadius = matView.layer.cornerRadius;
-				else //Fixes flashlight expanded module
-					cornerRadius = viewController.expanded ? self.expandedContinuousCornerRadius : self.compactContinuousCornerRadius;
-			}
-
-			self.layer.borderWidth = borderWidthTemp;
-			self.layer.borderColor = borderColor.CGColor;
-			[self.layer setCornerRadius:cornerRadius];
-		}
-
-		if (wantsCornerRadius) {
-
-			BOOL expanded = MSHookIvar<BOOL>(self, "_expanded");
-
-			if (expanded)
-				return;
-
-			double tempCornerRadius = cornerRadius;				
-
-			if ([[viewController moduleIdentifier] containsString:@"Home.ControlCenter"] || [[viewController moduleIdentifier] containsString:@"DisplayModule"] || [[viewController moduleIdentifier] containsString:@"controlcenter.audio"])
-				tempCornerRadius = tempCornerRadius - 4;
-
-			if (![[viewController moduleIdentifier] containsString:@"Home.ControlCenter"]) {
-				[self setClipsToBounds: YES];
-				self.layer.cornerRadius = tempCornerRadius;
-				self.layer.cornerCurve = kCACornerCurveContinuous;				
-			}				
-
-			for (UIView *subview in self.subviews) {
-
-				UIView *currentView = subview;
-				while (currentView) {
-					if([currentView isKindOfClass: %c(CCUIContinuousSliderView)] || [currentView isKindOfClass:%c(MTMaterialView)]) {
-
-						[currentView setClipsToBounds: YES];
-						currentView.layer.cornerRadius = tempCornerRadius;
-						currentView.layer.cornerCurve = kCACornerCurveContinuous;						
-					}					
-
-					currentView = currentView.subviews.count > 0 ? currentView.subviews[0] : nil;
-				}
-			}
-		}
-	}
-
-%end
-
-//Home Tiles in CC
-%hook UICollectionViewCell
-
-	-(void)didMoveToWindow {
-		%orig;			
-		if ([self isKindOfClass:%c(HUGridCell)]) {
-			if (wantsBorder) {
-				self.layer.borderWidth = borderWidth;
-				self.layer.borderColor = borderColor.CGColor;
-			}
-
-			// if (wantsCornerRadius) {
-			// 	[((HUGridCell*)self).gridBackgroundView setCornerRadius:cornerRadius-8];
-			// }
-		}
-	}	
-
-%end
-
 %group Corners
+
+	%hook CCUIButtonModuleView
+	
+		-(double)_continuousCornerRadius {return cornerRadius;}
+
+		-(void)_setContinuousCornerRadius:(double)arg1 {%orig(cornerRadius);}
+
+		-(void)layoutSubviews {
+			%orig;
+			UIView *bgView = MSHookIvar<UIView*>(self,"_highlightedBackgroundView");
+			if (bgView)
+				bgView.layer.cornerRadius = cornerRadius;
+		}
+
+	%end
+
+	%hook MRUContinuousSliderView
+	
+		-(void)layoutSubviews {
+			%orig;
+			if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])			
+				self.materialView.layer.cornerRadius = cornerRadius;
+		}
+	%end
+
+	%hook CCUIContinuousSliderView
+
+		-(double)continousSliderCornerRadius {
+			if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])
+				return cornerRadius;
+
+			return %orig;
+		}
+
+		-(void)setContinuousSliderCornerRadius:(double)arg1 {
+			if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])
+				arg1 = cornerRadius;
+
+			%orig(arg1);
+		}	
+
+	%end	
+
+	%hook CCUIContentModuleContainerViewController
+
+		-(double)_continuousCornerRadiusForCompactState {return cornerRadius;}
+
+	%end
+
+	%hook CCUIContentModuleContentContainerView
+
+		-(void)layoutSubviews {
+			%orig;
+			CCUIContentModuleContainerViewController *viewController = [self _viewControllerForAncestor];			
+			if ([[viewController moduleIdentifier] isEqualToString:@"com.apple.FocusUIModule"] && !viewController.expanded) {
+					for (UIView *subview in self.subviews) {
+						UIView *currentView = subview;
+						while (currentView) {
+							if([currentView isKindOfClass:%c(MTMaterialView)])
+								currentView.layer.cornerRadius = cornerRadius;
+
+							currentView = currentView.subviews.count > 0 ? currentView.subviews[0] : nil;
+						}
+				}					
+			}			
+		}
+
+		-(double)compactContinuousCornerRadius {return cornerRadius;}
+
+		-(void)setCompactContinuousCornerRadius:(double)arg1 {%orig(cornerRadius);}
+	%end
 
 	%hook MRUControlCenterView
 
+		-(double)cornerRadius {return cornerRadius;}
+
+		-(void)setCornerRadius:(double)arg1 {%orig(cornerRadius);}		
+		
 		-(void)layoutSubviews {
 			%orig;
 			CGRect origFrame = self.routingButton.frame;
@@ -278,6 +260,61 @@ static UIColor *volumeGlyphColor;
 %end
 
 %group Borders
+
+	//Most CC modules
+	%hook CCUIContentModuleContentContainerView	
+		- (void)layoutSubviews {
+			%orig;
+			MTMaterialView *matView = MSHookIvar<MTMaterialView *>(self, "_moduleMaterialView");
+			CCUIContentModuleContainerViewController *viewController = [self _viewControllerForAncestor];
+
+			if (wantsBorder) {
+				CGFloat borderWidthTemp = borderWidth;
+				CGFloat cornerRadius = 0;
+				if (!matView) {
+					//Fixes focus indicator
+					if ([[viewController moduleIdentifier] isEqualToString:@"com.apple.FocusUIModule"]) {
+						if (!viewController.expanded)
+							cornerRadius = self.compactContinuousCornerRadius;
+						else
+							borderWidthTemp = 0.0;
+					}
+					else
+						return;
+				}
+				else {
+					if (matView.layer.cornerRadius > 0)
+						cornerRadius = matView.layer.cornerRadius;
+					else //Fixes flashlight expanded module
+						cornerRadius = viewController.expanded ? self.expandedContinuousCornerRadius : self.compactContinuousCornerRadius;
+				}
+
+				self.layer.borderWidth = borderWidthTemp;
+				self.layer.borderColor = borderColor.CGColor;
+				[self.layer setCornerRadius:cornerRadius];
+			}
+		}
+
+	%end
+
+	//Home Tiles in CC
+	%hook UICollectionViewCell
+
+		-(void)didMoveToWindow {
+			%orig;			
+			if ([self isKindOfClass:%c(HUGridCell)]) {
+				if (wantsBorder) {
+					self.layer.borderWidth = borderWidth;
+					self.layer.borderColor = borderColor.CGColor;
+				}
+
+				// if (wantsCornerRadius) {
+				// 	[((HUGridCell*)self).gridBackgroundView setCornerRadius:cornerRadius-8];
+				// }
+			}
+		}	
+
+	%end	
 
 	//Round Toggle Controls, True Tone etc
 	%hook CCUIRoundButton
@@ -390,19 +427,19 @@ static void reloadSettings() {
 		wantsGlyphColoring = [prefs objectForKey:@"wantsGlyphColoring"] ? [[prefs objectForKey:@"wantsGlyphColoring"] boolValue] : wantsGlyphColoring;
 		borderWidth = [prefs objectForKey:@"borderWidth"] ? [[prefs objectForKey:@"borderWidth"] doubleValue] : borderWidth;
 		cornerRadius = [prefs objectForKey:@"cornerRadius"] ? [[prefs objectForKey:@"cornerRadius"] doubleValue] : cornerRadius;
-		borderColor = [prefs objectForKey:@"borderColor"] ? [prefs objectForKey:@"borderColor"] : borderColor;
-		brightnessGlyphColor = [prefs objectForKey:@"brightnessGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"brightnessGlyphColor"],@"#C67828") : brightnessGlyphColor;
-		volumeGlyphColor = [prefs objectForKey:@"volumeGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"volumeGlyphColor"],@"#3C7397") : volumeGlyphColor;
+		borderColor = [prefs objectForKey:@"borderColor"] ? LCPParseColorString([prefs objectForKey:@"borderColor"],@"#A9A9A9") : borderColor;
+		brightnessGlyphColor = [prefs objectForKey:@"brightnessGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"brightnessGlyphColor"],@"#FF8548") : brightnessGlyphColor;
+		volumeGlyphColor = [prefs objectForKey:@"volumeGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"volumeGlyphColor"],@"#00C6FB") : volumeGlyphColor;
 	}
 
 	if (!borderColor)
-		borderColor = [UIColor systemGrayColor];
+		borderColor = LCPParseColorString(@"#A9A9A9",@"#A9A9A9");
 
 	if (!brightnessGlyphColor)
-		brightnessGlyphColor = LCPParseColorString(@"#C67828",@"#C67828");
+		brightnessGlyphColor = LCPParseColorString(@"#FF8548",@"#FF8548");
 
 	if (!volumeGlyphColor)
-		volumeGlyphColor = LCPParseColorString(@"#3C7397",@"#3C7397");
+		volumeGlyphColor = LCPParseColorString(@"#00C6FB",@"#00C6FB");
 }
 
 %ctor {
