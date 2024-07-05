@@ -100,7 +100,7 @@
 				<key>key</key>
 				<string>cornerRadius</string>
 				<key>label</key>
-				<string>Corner Radius</string>
+				<string>Toggles/Modules Corner Radius</string>
 				<key>default</key>
 				<integer>36</integer>
 				<key>isNumeric</key>
@@ -108,6 +108,25 @@
 				<key>PostNotification</key>
 				<string>com.fiore.ccborder.settingschanged</string>
 			</dict>		
+
+			<dict>
+				<key>cell</key>
+				<string>PSEditTextCell</string>
+				<key>defaults</key>
+				<string>com.fiore.ccborder</string>
+				<key>detail</key>
+				<string>PSDetailController</string>
+				<key>key</key>
+				<string>sliderCornerRadius</string>
+				<key>label</key>
+				<string>Slider Corner Radius</string>
+				<key>default</key>
+				<integer>28</integer>
+				<key>isNumeric</key>
+				<true/>
+				<key>PostNotification</key>
+				<string>com.fiore.ccborder.settingschanged</string>
+			</dict>				
 
 			<dict>
 				<key>cell</key>

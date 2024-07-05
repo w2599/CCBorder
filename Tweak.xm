@@ -98,6 +98,7 @@ static UIColor *borderColor = nil;
 
 static BOOL wantsCornerRadius = YES;
 static double cornerRadius = 36;
+static double sliderCornerRadius = 28;
 
 static BOOL wantsGlyphColoring = YES;
 static UIColor *brightnessGlyphColor = nil;
@@ -189,8 +190,8 @@ static UIColor *volumeGlyphColor = nil;
 	
 		-(void)layoutSubviews {
 			%orig;
-			if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])			
-				self.materialView.layer.cornerRadius = cornerRadius;
+			if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])			
+				self.materialView.layer.cornerRadius = sliderCornerRadius;
 		}
 	%end
 
@@ -198,14 +199,14 @@ static UIColor *volumeGlyphColor = nil;
 
 		-(double)continousSliderCornerRadius {
 			if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])
-				return cornerRadius;
+				return sliderCornerRadius;
 
 			return %orig;
 		}
 
 		-(void)setContinuousSliderCornerRadius:(double)arg1 {
 			if ([[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"CCUIDisplayModuleViewController")] || [[self _viewControllerForAncestor] isKindOfClass:NSClassFromString(@"MRUVolumeViewController")])
-				arg1 = cornerRadius;
+				arg1 = sliderCornerRadius;
 
 			%orig(arg1);
 		}	
@@ -214,7 +215,12 @@ static UIColor *volumeGlyphColor = nil;
 
 	%hook CCUIContentModuleContainerViewController
 
-		-(double)_continuousCornerRadiusForCompactState {return cornerRadius;}
+		-(double)_continuousCornerRadiusForCompactState {
+			if ([[self moduleIdentifier] isEqualToString:@"com.apple.control-center.DisplayModule"]) 
+				return sliderCornerRadius;
+			else
+				return cornerRadius;
+		}
 
 	%end
 
@@ -236,9 +242,21 @@ static UIColor *volumeGlyphColor = nil;
 			}			
 		}
 
-		-(double)compactContinuousCornerRadius {return cornerRadius;}
+		-(double)compactContinuousCornerRadius {
+			CCUIContentModuleContainerViewController *viewController = [self _viewControllerForAncestor];
+			if ([[viewController moduleIdentifier] isEqualToString:@"com.apple.control-center.DisplayModule"]) 
+				return sliderCornerRadius;
+			else
+				return cornerRadius;
+		}
 
-		-(void)setCompactContinuousCornerRadius:(double)arg1 {%orig(cornerRadius);}
+		-(void)setCompactContinuousCornerRadius:(double)arg1 {
+			CCUIContentModuleContainerViewController *viewController = [self _viewControllerForAncestor];
+			if ([[viewController moduleIdentifier] isEqualToString:@"com.apple.control-center.DisplayModule"]) 
+				arg1 = sliderCornerRadius;
+
+			%orig(arg1);
+		}
 	%end
 
 	%hook MRUControlCenterView
@@ -427,6 +445,7 @@ static void reloadSettings() {
 		wantsGlyphColoring = [prefs objectForKey:@"wantsGlyphColoring"] ? [[prefs objectForKey:@"wantsGlyphColoring"] boolValue] : wantsGlyphColoring;
 		borderWidth = [prefs objectForKey:@"borderWidth"] ? [[prefs objectForKey:@"borderWidth"] doubleValue] : borderWidth;
 		cornerRadius = [prefs objectForKey:@"cornerRadius"] ? [[prefs objectForKey:@"cornerRadius"] doubleValue] : cornerRadius;
+		sliderCornerRadius = [prefs objectForKey:@"sliderCornerRadius"] ? [[prefs objectForKey:@"sliderCornerRadius"] doubleValue] : sliderCornerRadius;
 		borderColor = [prefs objectForKey:@"borderColor"] ? LCPParseColorString([prefs objectForKey:@"borderColor"],@"#A9A9A9") : borderColor;
 		brightnessGlyphColor = [prefs objectForKey:@"brightnessGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"brightnessGlyphColor"],@"#FF8548") : brightnessGlyphColor;
 		volumeGlyphColor = [prefs objectForKey:@"volumeGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"volumeGlyphColor"],@"#00C6FB") : volumeGlyphColor;
