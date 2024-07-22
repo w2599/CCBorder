@@ -32,11 +32,17 @@
 }
 @end
 
-@interface CCUIContinuousSliderView : UIView {
+@interface CCUIBaseSliderView : UIView
+	- (float)value;
+	@property (assign,getter=isGlyphVisible,nonatomic) BOOL glyphVisible;
+@end
+
+@interface CCUIContinuousSliderView : CCUIBaseSliderView{
 	MTMaterialView *_backgroundView;	
 }
-@property (assign,getter=isGlyphVisible,nonatomic) BOOL glyphVisible;
--(void)colorSliderGlyphs;
+	@property (nonatomic, retain) UILabel *percentLabel;
+	@property (assign,getter=isGlyphVisible,nonatomic) BOOL glyphVisible;
+	-(void)colorSliderGlyphs;
 @end
 
 @interface MRUContinuousSliderView : CCUIContinuousSliderView
@@ -90,7 +96,11 @@
 
 @interface CALayer (CCBorder)
 	@property (assign) CGColorRef contentsMultiplyColor;
+	@property (nonatomic, assign) BOOL allowsGroupOpacity;
+	@property (nonatomic, assign) BOOL allowsGroupBlending;
 @end
+
+
 
 static BOOL wantsBorder = YES;
 static double borderWidth = 4.0;
@@ -103,6 +113,8 @@ static double sliderCornerRadius = 28;
 static BOOL wantsGlyphColoring = YES;
 static UIColor *brightnessGlyphColor = nil;
 static UIColor *volumeGlyphColor = nil;
+
+static BOOL wantsText = YES;
 
 %group GlyphColoring
 	%hook CALayer
@@ -418,6 +430,51 @@ static UIColor *volumeGlyphColor = nil;
 
 %end
 
+%group gText
+
+%hook CCUIContinuousSliderView
+	%property (nonatomic, retain) UILabel *percentLabel;
+
+	- (id)initWithFrame:(CGRect)arg1
+	{
+		CCUIContinuousSliderView *orig = %orig;
+		orig.percentLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+		orig.percentLabel.text = @"0%";
+		[orig addSubview:orig.percentLabel];
+		orig.percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
+		[orig.percentLabel.centerXAnchor constraintEqualToAnchor:self.centerXAnchor].active = YES;
+		[orig.percentLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active = YES;
+		orig.percentLabel.font = [UIFont boldSystemFontOfSize:16];
+		return orig;
+	}
+
+	- (void)setValue:(float)arg1
+	{
+		%orig;
+
+		if (self.percentLabel)
+		{
+			float val = arg1*100;
+			if (arg1 > 1)
+				val = 100;
+			else if (arg1 < 0)
+				val = 0;
+
+			if (self.glyphVisible) //To handle the minimized volume hud view
+			{
+				self.percentLabel.hidden = NO;
+				self.percentLabel.textColor = val > 49 ? [UIColor blackColor] : [UIColor whiteColor];
+				self.percentLabel.text = [[NSString stringWithFormat:@"%.f", val] stringByAppendingString:@"%"];				
+			}
+			else
+				self.percentLabel.hidden = YES;
+		}
+	}
+%end
+
+%end
+
+
 //Home App in CC, Needs hook in com.apple.HomeUI
 // %hook HUControllableItemCollectionViewController
 
@@ -449,6 +506,7 @@ static void reloadSettings() {
 		borderColor = [prefs objectForKey:@"borderColor"] ? LCPParseColorString([prefs objectForKey:@"borderColor"],@"#A9A9A9") : borderColor;
 		brightnessGlyphColor = [prefs objectForKey:@"brightnessGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"brightnessGlyphColor"],@"#FF8548") : brightnessGlyphColor;
 		volumeGlyphColor = [prefs objectForKey:@"volumeGlyphColor"] ? LCPParseColorString([prefs objectForKey:@"volumeGlyphColor"],@"#00C6FB") : volumeGlyphColor;
+		wantsText =  [prefs objectForKey:@"wantsText"] ? [[prefs objectForKey:@"wantsText"] boolValue] : wantsText;
 	}
 
 	if (!borderColor)
@@ -474,6 +532,9 @@ static void reloadSettings() {
 
 	if (wantsGlyphColoring)
 		%init(GlyphColoring);
+
+	if (wantsText)
+		%init(gText);
 
 	%init;
 }
